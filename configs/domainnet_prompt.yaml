@@ -2,7 +2,7 @@ dataset: DomainNet
 first_split_size: 69
 other_split_size: 69
 schedule:
-- 5
+- 20
 schedule_type: cosine
 batch_size: 128
 optimizer: Adam

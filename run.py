@@ -45,6 +45,12 @@ def create_args():
                         help='if using larger prompt lr, prompt lr = 10 * head lr')
     parser.add_argument('--eval_class_wise', default=False, action='store_true')
 
+    # CFST Args
+    parser.add_argument('--compositional_testing', action='store_true')
+    parser.add_argument('--mode', type=str, default='continual',
+                        help="choices: [continual, sys, pro, sub, non, noc]")
+    parser.add_argument('--test_model', type=int, default=-1, help="-1 for last model, starting from 1. ")
+
     # Config Arg
     parser.add_argument('--config', type=str, default="configs/config.yaml",
                          help="yaml experiment config input")

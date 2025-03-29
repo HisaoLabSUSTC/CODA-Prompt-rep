@@ -16,6 +16,7 @@ class Trainer:
     def __init__(self, args, seed, metric_keys, save_keys):
 
         # process inputs
+        self.args = args
         self.seed = seed
         self.metric_keys = metric_keys
         self.save_keys = save_keys
@@ -82,6 +83,7 @@ class Trainer:
             self.max_task = min(args.max_task, len(self.task_names))
         else:
             self.max_task = len(self.task_names)
+        args.max_task = self.max_task
 
         # datasets and dataloaders
         k = 1 # number of transforms per image
@@ -142,6 +144,7 @@ class Trainer:
             return self.learner.validation(test_loader, task_metric=task)
 
     def train(self, avg_metrics):
+        from debug import Debugger      # only used in train func to store run time values
     
         # temporary results saving
         temp_table = {}
@@ -151,6 +154,7 @@ class Trainer:
 
         # for each task
         for i in range(self.max_task):
+            debugger = Debugger(level='DEBUG', args=vars(self.args))
 
             # save current task index
             self.current_t_index = i
@@ -208,8 +212,16 @@ class Trainer:
             acc_table_ssl = []
             self.reset_cluster_labels = True
             for j in range(i+1):
-                acc_table.append(self.task_eval(j))
+                task_acc = self.task_eval(j)
+                acc_table.append(task_acc)
+
+                # log
+                self.learner.epoch_log['scaler']['Tag'].append(f'val_acc/task_{j}')
+                self.learner.epoch_log['scaler']['Idx'].append(i)
+                self.learner.epoch_log['scaler']['Value'].append(task_acc)
+
             temp_table['acc'].append(np.mean(np.asarray(acc_table)))
+            temp_table['acc'].append(np.asarray([*acc_table, *[0 for _ in range(i+1, self.max_task)], np.mean(np.asarray(acc_table))]))      # pt and mean
 
             # save temporary acc results
             for mkey in ['acc']:
@@ -217,6 +229,50 @@ class Trainer:
                 np.savetxt(save_file, np.asarray(temp_table[mkey]), delimiter=",", fmt='%.2f')  
 
             if avg_train_time is not None: avg_metrics['time']['global'][i] = avg_train_time
+
+            '''save epoch log'''
+            if hasattr(self.learner, 'epoch_log'):
+                self.learner.train_log_to_df()
+                epoch_log = self.learner.epoch_log
+
+                debugger.save_log(epoch_log, temp_dir + f'log_seed{self.seed}_t{i}' + '.pkl')
+
+                if not os.path.exists(temp_dir + f'train_log_seed{self.seed}_t{i}' + '.pkl'):
+                    debugger.save_log(epoch_log, temp_dir + f'train_log_seed{self.seed}_t{i}' + '.pkl')
+
+                debugger.collect_losses(draw=True)
+
+                # if len(epoch_log['scaler']) > 0:     # perform training
+                #     debugger.write_scaler(epoch_log['scaler'], key='all', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/ce_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/hv_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/mo_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/s2p_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/mk_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/ccl_loss', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='loss/slot_recon_loss', i=i, writer=writer, inner=True)
+                #     # # debugger.write_scaler(epoch_log['scaler'], key='val_acc_phase1', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='val_acc', i=i, writer=writer, inner=True)
+                #     # debugger.write_scaler(epoch_log['scaler'], key='alpha', i=i, writer=writer, inner=True)
+                #     # # debugger.write_scaler(epoch_log['scaler'], key='loss/et_loss', i=i, writer=writer, inner=True)
+                #     # # debugger.write_scaler(epoch_log['scaler'], key='et/loss', i=i, writer=writer, inner=True)
+                #     # # debugger.write_scaler(epoch_log['scaler'], key='et/acc', i=i, writer=writer, inner=True)
+                #
+                # '''write mo'''
+                # if len(epoch_log['mo']) > 0:
+                #     # debugger.write_mo(epoch_log['mo'], None, i=i, writer=writer, target='acc')
+                #     debugger.write_mo(epoch_log['mo'], None, i=i, writer=writer, target='loss')
+                #     debugger.write_mo(epoch_log['mo'], None, i=i, writer=writer, target='norm_loss')
+                #
+                #     '''write hv acc/loss'''
+                #     # debugger.write_hv(epoch_log['mo'], i, ref=0, writer=writer, target='acc', norm=False)
+                #     debugger.write_hv(epoch_log['mo'], i, ref=1, writer=writer, target='loss', norm=False)
+                #     '''write avg_span acc/loss: E_i(max(f_i) - min(f_i))'''
+                #     # debugger.write_avg_span(epoch_log['mo'], i, writer=writer, target='acc', norm=False)
+                #     debugger.write_avg_span(epoch_log['mo'], i, writer=writer, target='loss', norm=False)
+                #     '''write min crowding distance'''
+                #     # debugger.write_min_crowding_distance(epoch_log['mo'], i, writer=writer, target='acc', norm=False)
+                #     debugger.write_min_crowding_distance(epoch_log['mo'], i, writer=writer, target='loss', norm=False)
 
         return avg_metrics 
     

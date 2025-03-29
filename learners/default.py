@@ -11,6 +11,7 @@ from torch.optim import Optimizer
 import contextlib
 import os
 import copy
+import pandas as pd
 from utils.schedulers import CosineSchedule
 
 class NormalNN(nn.Module):
@@ -62,6 +63,21 @@ class NormalNN(nn.Module):
         # initialize optimizer
         self.init_optimizer()
 
+        # log
+        self.epoch_log = dict()
+        self.init_train_log()
+
+    def init_train_log(self):
+        self.epoch_log = dict()
+        # Tag: acc/loss
+        self.epoch_log['mo'] = {'Tag': [], 'Pop_id': [], 'Obj_id': [], 'Epoch_id': [], 'Inner_id': [], 'Value': []}
+        # 'loss/hv_loss'
+        self.epoch_log['scaler'] = {'Tag': [], 'Idx': [], 'Value': []}
+
+    def train_log_to_df(self):
+        self.epoch_log['mo'] = pd.DataFrame(self.epoch_log['mo'])
+        self.epoch_log['scaler'] = pd.DataFrame(self.epoch_log['scaler'])
+
     ##########################################
     #           MODEL TRAINING               #
     ##########################################
@@ -96,6 +112,7 @@ class NormalNN(nn.Module):
                 for param_group in self.optimizer.param_groups:
                     self.log('LR:', param_group['lr'])
                 batch_timer.tic()
+                loss_dict = {}
                 for i, (x, y, task)  in enumerate(train_loader):
 
                     # verify in train mode
@@ -107,7 +124,7 @@ class NormalNN(nn.Module):
                         y = y.cuda()
                     
                     # model update
-                    loss, output= self.update_model(x, y)
+                    loss, output, loss_dict = self.update_model(x, y)
 
                     # measure elapsed time
                     batch_time.update(batch_timer.toc())  
@@ -121,12 +138,26 @@ class NormalNN(nn.Module):
 
                 # eval update
                 self.log('Epoch:{epoch:.0f}/{total:.0f}'.format(epoch=self.epoch+1,total=self.config['schedule'][-1]))
-                self.log(' * Loss {loss.avg:.3f} | Train Acc {acc.avg:.3f}'.format(loss=losses,acc=acc))
+                self.log(
+                    ' * Loss {loss.avg:.3f} | '
+                    'Train Acc {acc.avg:.3f} | '
+                    '{loss_dict} | '
+                    'Time {time.avg:.3f}*{i}'.format(
+                        loss=losses, acc=acc, time=batch_time, i=len(train_loader),
+                        loss_dict=loss_dict))
 
                 # reset
                 losses = AverageMeter()
                 acc = AverageMeter()
-                
+
+                # validation
+                if val_loader is not None:
+                    val_acc = self.validation(val_loader)
+                    # log
+                    self.epoch_log['scaler']['Tag'].append(f'val_acc')
+                    self.epoch_log['scaler']['Idx'].append(self.epoch)
+                    self.epoch_log['scaler']['Value'].append(val_acc)
+
         self.model.eval()
 
         self.last_valid_out_dim = self.valid_out_dim
@@ -155,7 +186,7 @@ class NormalNN(nn.Module):
         self.optimizer.zero_grad()
         total_loss.backward()
         self.optimizer.step()
-        return total_loss.detach(), logits
+        return total_loss.detach(), logits, {}
 
     def validation(self, dataloader, model=None, task_in = None, task_metric='acc',  verbal = True, task_global=False):
 
@@ -183,7 +214,7 @@ class NormalNN(nn.Module):
                 mask_ind = mask.nonzero().view(-1) 
                 input, target = input[mask_ind], target[mask_ind]
 
-                mask = target < task_in[-1]
+                mask = target <= task_in[-1]
                 mask_ind = mask.nonzero().view(-1) 
                 input, target = input[mask_ind], target[mask_ind]
                 
@@ -198,8 +229,12 @@ class NormalNN(nn.Module):
         model.train(orig_mode)
 
         if verbal:
-            self.log(' * Val Acc {acc.avg:.3f}, Total time {time:.2f}'
-                    .format(acc=acc, time=batch_timer.toc()))
+            if task_in is None:
+                self.log(' * Val Acc {acc.avg:.3f}, Total time {time:.2f}'
+                        .format(acc=acc, time=batch_timer.toc()))
+            else:
+                self.log(' * Val ({l},{r}) Acc {acc.avg:.3f}, Total time {time:.2f}'
+                        .format(acc=acc, time=batch_timer.toc(), l=task_in[0], r=task_in[-1]))
         return acc.avg
 
     ##########################################
@@ -236,10 +271,15 @@ class NormalNN(nn.Module):
 
     # sets model optimizers
     def init_optimizer(self):
+        lr = self.config['lr']
+        if type(lr) is list:
+            lr = lr[-1]
+        print(f'init_optimizer: lr: {lr}')
+        print(f'num parameters: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}')
 
         # parse optimizer args
         optimizer_arg = {'params':self.model.parameters(),
-                         'lr':self.config['lr'],
+                         'lr':lr,
                          'weight_decay':self.config['weight_decay']}
         if self.config['optimizer'] in ['SGD','RMSprop']:
             optimizer_arg['momentum'] = self.config['momentum']
@@ -253,12 +293,15 @@ class NormalNN(nn.Module):
 
         # create optimizers
         self.optimizer = torch.optim.__dict__[self.config['optimizer']](**optimizer_arg)
-        
+
         # create schedules
         if self.schedule_type == 'cosine':
             self.scheduler = CosineSchedule(self.optimizer, K=self.schedule[-1])
         elif self.schedule_type == 'decay':
             self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.schedule, gamma=0.1)
+        else:       # no change
+            self.scheduler = type('empty_scheduler', (), {})()
+            self.scheduler.step = lambda x=0: None       # empty object scheduler with empty step() func.
 
     def create_model(self):
         cfg = self.config

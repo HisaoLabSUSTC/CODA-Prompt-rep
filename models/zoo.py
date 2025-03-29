@@ -385,6 +385,11 @@ class ViTZoo(nn.Module):
         
         # feature encoder changes if transformer vs resnet
         self.feat = zoo_model
+
+        # freeze feature encoder
+        for param in self.feat.parameters():
+            param.requires_grad = False
+
         
     # pen: get penultimate features    
     def forward(self, x, pen=False, train=False):

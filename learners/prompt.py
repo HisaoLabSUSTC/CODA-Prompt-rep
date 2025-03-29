@@ -44,7 +44,7 @@ class Prompt(NormalNN):
         return total_loss.detach(), logits
 
     # sets model optimizers
-    def init_optimizer(self):
+    def init_optimizer_origin(self):
 
         # parse optimizer args
         # Multi-GPU
@@ -53,10 +53,11 @@ class Prompt(NormalNN):
         else:
             params_to_opt = list(self.model.prompt.parameters()) + list(self.model.last.parameters())
         print('*****************************************')
-        optimizer_arg = {'params':params_to_opt,
-                         'lr':self.config['lr'],
-                         'weight_decay':self.config['weight_decay']}
-        if self.config['optimizer'] in ['SGD','RMSprop']:
+        print(f'num parameters: {sum(p.numel() for p in params_to_opt if p.requires_grad)}')
+        optimizer_arg = {'params': params_to_opt,
+                         'lr': self.config['lr'],
+                         'weight_decay': self.config['weight_decay']}
+        if self.config['optimizer'] in ['SGD', 'RMSprop']:
             optimizer_arg['momentum'] = self.config['momentum']
         elif self.config['optimizer'] in ['Rprop']:
             optimizer_arg.pop('weight_decay')
@@ -64,16 +65,126 @@ class Prompt(NormalNN):
             optimizer_arg['amsgrad'] = True
             self.config['optimizer'] = 'Adam'
         elif self.config['optimizer'] == 'Adam':
-            optimizer_arg['betas'] = (self.config['momentum'],0.999)
+            optimizer_arg['betas'] = (self.config['momentum'], 0.999)
 
         # create optimizers
         self.optimizer = torch.optim.__dict__[self.config['optimizer']](**optimizer_arg)
-        
+
         # create schedules
         if self.schedule_type == 'cosine':
             self.scheduler = CosineSchedule(self.optimizer, K=self.schedule[-1])
         elif self.schedule_type == 'decay':
             self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=self.schedule, gamma=0.1)
+
+    # sets model optimizers
+    def init_optimizer(self, target=None, schedule=None):
+        if schedule is None:
+            schedule = self.schedule
+
+        if type(self.config['lr']) is float:
+            lr = self.config['lr']
+        else:
+            lr = self.config['lr'][0]
+
+        lr_decreace_ratio = self.config['lr_decreace_ratio']
+        larger_prompt_lr = self.config['args'].larger_prompt_lr
+
+        # parse optimizer args
+        # Multi-GPU
+        if len(self.config['gpuid']) > 1:
+            last = self.model.module.last
+            prompt = self.model.module.prompt
+        else:
+            last = self.model.last
+            prompt = self.model.prompt
+
+        params_to_opt_p, names_p = [], []
+        params_to_opt_l, names_l = [], []
+        if self.config['mode'] in ['sys', 'pro', 'sub', 'non', 'noc']:
+            # if fewshot testing self.config['mode'], only learn classifier: model.last
+            for k, p in self.model.named_parameters():
+                if 'last' in k and p.requires_grad:
+                    params_to_opt_l.append(p)
+                    names_l.append(k)
+        elif target == 'last':
+            for k, p in self.model.named_parameters():
+                if 'last' in k and p.requires_grad:
+                    params_to_opt_l.append(p)
+                    names_l.append(k)
+        elif target == 'prompt':
+            for k, p in self.model.named_parameters():
+                if 'prompt' in k and p.requires_grad:
+                    params_to_opt_p.append(p)
+                    names_p.append(k)
+        elif target == 'p':
+            for k, p in self.model.named_parameters():
+                if 'e_p_' in k and p.requires_grad:
+                    params_to_opt_p.append(p)
+                    names_p.append(k)
+                elif 'last' in k and p.requires_grad:
+                    params_to_opt_l.append(p)
+                    names_l.append(k)
+        elif target == 'ka':
+            for k, p in self.model.named_parameters():
+                if ('e_k_' in k or 'e_a_' in k) and p.requires_grad:
+                    params_to_opt_p.append(p)
+                    names_p.append(k)
+                elif 'last' in k and p.requires_grad:
+                    params_to_opt_l.append(p)
+                    names_l.append(k)
+        else:
+            for k, p in self.model.named_parameters():
+                if 'prompt' in k and p.requires_grad:
+                    params_to_opt_p.append(p)
+                    names_p.append(k)
+                elif 'last' in k and p.requires_grad:
+                    params_to_opt_l.append(p)
+                    names_l.append(k)
+
+        print('******************* init optimizer **********************')
+        print(f'optimizer params: {"all" if target is None else target} '
+              f'len {[len(params_to_opt_p), len(params_to_opt_l)]}')
+        print(f'[{sum(p.numel() for p in params_to_opt_p)}]: {names_p}')
+        print(f'[{sum(p.numel() for p in params_to_opt_l)}]: {names_l}')
+
+        if larger_prompt_lr:
+            lrs = [lr, 0.1 * lr]
+        else:       #
+            lrs = [lr_decreace_ratio * lr, lr]
+        params = [params_to_opt_p, params_to_opt_l]
+        print(f'lrs: {lrs}')
+
+        opt_args = []
+        for idx in range(len(lrs)):
+            _lr = lrs[idx]
+            _params = params[idx]
+            if len(_params) > 0:
+                optimizer_arg = {'params':_params,
+                                 'lr':_lr,
+                                 'weight_decay':self.config['weight_decay']}
+                if self.config['optimizer'] in ['SGD','RMSprop']:
+                    optimizer_arg['momentum'] = self.config['momentum']
+                elif self.config['optimizer'] in ['Rprop']:
+                    optimizer_arg.pop('weight_decay')
+                elif self.config['optimizer'] == 'amsgrad':
+                    optimizer_arg['amsgrad'] = True
+                    self.config['optimizer'] = 'Adam'
+                elif self.config['optimizer'] == 'Adam':
+                    optimizer_arg['betas'] = (self.config['momentum'],0.999)
+                opt_args.append(optimizer_arg)
+
+        # create optimizers
+        self.optimizer = torch.optim.__dict__[self.config['optimizer']](opt_args, lr=lr)    # default lr
+        # self.optimizer = torch.optim.__dict__[self.config['optimizer']](**optimizer_arg)
+
+        # create schedules
+        if self.schedule_type == 'cosine':
+            self.scheduler = CosineSchedule(self.optimizer, K=schedule[-1])
+        elif self.schedule_type == 'decay':
+            self.scheduler = torch.optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=schedule, gamma=0.1)
+        else:       # no change
+            self.scheduler = type('empty_scheduler', (), {})()
+            self.scheduler.step = lambda x=0: None       # empty object scheduler with empty step() func.
 
     def create_model(self):
         pass

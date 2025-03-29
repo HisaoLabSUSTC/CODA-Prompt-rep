@@ -223,7 +223,7 @@ class Trainer:
                 self.learner.epoch_log['scaler']['Idx'].append(i)
                 self.learner.epoch_log['scaler']['Value'].append(task_acc)
 
-            temp_table['acc'].append(np.mean(np.asarray(acc_table)))
+            # temp_table['acc'].append(np.mean(np.asarray(acc_table)))
             temp_table['acc'].append(np.asarray([*acc_table, *[0 for _ in range(i+1, self.max_task)], np.mean(np.asarray(acc_table))]))      # pt and mean
 
             # save temporary acc results

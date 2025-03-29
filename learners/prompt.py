@@ -41,7 +41,9 @@ class Prompt(NormalNN):
         total_loss.backward()
         self.optimizer.step()
 
-        return total_loss.detach(), logits
+        loss_dict = {}
+
+        return total_loss.detach(), logits, loss_dict
 
     # sets model optimizers
     def init_optimizer_origin(self):

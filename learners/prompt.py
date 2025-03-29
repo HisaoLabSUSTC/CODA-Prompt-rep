@@ -86,7 +86,7 @@ class Prompt(NormalNN):
         else:
             lr = self.config['lr'][0]
 
-        lr_decreace_ratio = self.config['lr_decreace_ratio']
+        lr_decreace_ratio = self.config['args'].lr_decreace_ratio
         larger_prompt_lr = self.config['args'].larger_prompt_lr
 
         # parse optimizer args

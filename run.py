@@ -28,6 +28,10 @@ def create_args():
                         help="activate learner specific settings for debug_mode")
     parser.add_argument('--repeat', type=int, default=1, help="Repeat the experiment N times")
     parser.add_argument('--overwrite', type=int, default=0, metavar='N', help='Train regardless of whether saved model exists')
+    parser.add_argument('--lr', nargs="+", type=float, default=[0.001, 0.001], help="lr")
+    parser.add_argument('--batch_size', type=int, default=32, help="batch size")
+    parser.add_argument('--lr_decreace_ratio', type=float, default=1.0,
+                        help="lr on prompt = ratio * lr")
 
     # CL Args          
     parser.add_argument('--oracle_flag', default=False, action='store_true', help='Upper bound for oracle')
@@ -37,6 +41,9 @@ def create_args():
     parser.add_argument('--DW', default=False, action='store_true', help='dataset balancing')
     parser.add_argument('--prompt_param', nargs="+", type=float, default=[1, 1, 1],
                          help="e prompt pool size, e prompt length, g prompt length")
+    parser.add_argument('--larger_prompt_lr', action='store_true',
+                        help='if using larger prompt lr, prompt lr = 10 * head lr')
+    parser.add_argument('--eval_class_wise', default=False, action='store_true')
 
     # Config Arg
     parser.add_argument('--config', type=str, default="configs/config.yaml",
@@ -45,17 +52,26 @@ def create_args():
     return parser
 
 def get_args(argv):
+    # parser=create_args()
+    # args = parser.parse_args(argv)
+    # config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
+    # config.update(vars(args))
+    # return argparse.Namespace(**config)
     parser=create_args()
     args = parser.parse_args(argv)
-    config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
-    config.update(vars(args))
+    config = vars(args)
+    config_yaml = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
+    config.update(config_yaml)      # make yaml overwrite args
+    # if config['debug_mode'] == 1:
+    #     config['batch_size'] = 16
     return argparse.Namespace(**config)
+
 
 # want to save everything printed to outfile
 class Logger(object):
-    def __init__(self, name):
+    def __init__(self, name, mode='a'):
         self.terminal = sys.stdout
-        self.log = open(name, "a")
+        self.log = open(name, mode)
 
     def write(self, message):
         self.terminal.write(message)
@@ -74,6 +90,8 @@ if __name__ == '__main__':
     if not os.path.exists(args.log_dir): os.makedirs(args.log_dir)
     log_out = args.log_dir + '/output.log'
     sys.stdout = Logger(log_out)
+    log_err = args.log_dir + '/err.log'
+    sys.stderr = Logger(log_err, 'w')
 
     # save args
     with open(args.log_dir + '/args.yaml', 'w') as yaml_file:

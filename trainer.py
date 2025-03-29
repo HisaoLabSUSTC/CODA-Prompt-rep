@@ -105,7 +105,10 @@ class Trainer:
         self.add_dim = 0
 
         # Prepare the self.learner (model)
-        self.learner_config = {'num_classes': num_classes,
+        self.learner_config = {
+                        'args': args,
+                        'dataset': args.dataset,
+                        'num_classes': num_classes,
                         'lr': args.lr,
                         'debug_mode': args.debug_mode == 1,
                         'momentum': args.momentum,

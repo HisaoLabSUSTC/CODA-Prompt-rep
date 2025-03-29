@@ -100,7 +100,7 @@ class Prompt(NormalNN):
 
         params_to_opt_p, names_p = [], []
         params_to_opt_l, names_l = [], []
-        if self.config['mode'] in ['sys', 'pro', 'sub', 'non', 'noc']:
+        if self.config['args'].mode in ['sys', 'pro', 'sub', 'non', 'noc']:
             # if fewshot testing self.config['mode'], only learn classifier: model.last
             for k, p in self.model.named_parameters():
                 if 'last' in k and p.requires_grad:

@@ -141,7 +141,7 @@ class NormalNN(nn.Module):
                     loss, output, loss_dict = self.update_model(x, y)
 
                     # debug:
-                    print(f'debug: NormalNN, learn_batch, x: {x.shape} {x[0,0,0,:10]}, '
+                    print(f'debug: NormalNN, learn_batch, x: {x.shape, x.min(), x.max()} {x[0,0,0,:10]}, '
                           f'y: {y.shape} {y[:10]}, task: {task.shape} {task[:10]} '
                           f'loss: {loss.item():.4f}; output {output.shape}: {output[0].detach().cpu().numpy()}')
                     raise Exception('stop')

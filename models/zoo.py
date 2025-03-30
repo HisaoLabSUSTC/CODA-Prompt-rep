@@ -38,6 +38,11 @@ class CodaPrompt(nn.Module):
             setattr(self, f'e_k_{e}',k)
             setattr(self, f'e_a_{e}',a)
 
+            # debug
+            print(f'debug coda prompt init layer {e}: p {p.shape} {p[0, 0, :10]}, k {k.shape} {k[0, :10]}'
+                  f'a {a.shape} {a[0, :10]}')
+
+
     def _init_smart(self, emb_d, prompt_param):
 
         # prompt basic param
@@ -182,6 +187,13 @@ class CodaPrompt(nn.Module):
                 loss += ortho_penalty(p.view(p.shape[0], -1)) * self.ortho_mu
             else:
                 loss = 0
+
+            # debug
+            print(f'debug coda prompt forward layer {l}: x_querry {x_querry.shape} {x_querry[0, :10]}, '
+                  f'a_querry {a_querry.shape} {a_querry[0, 0, :10]}'
+                  f'aq_k {aq_k.shape} {aq_k[0, :10]}'
+                  f'P_ {P_.shape} {P_[0, 0, :10]}')
+
         else:
             loss = 0
 
@@ -394,7 +406,7 @@ class ViTZoo(nn.Module):
     # pen: get penultimate features    
     def forward(self, x, pen=False, train=False):
         # debug
-        print(f'debug vitzoo forward: x {x.shape} {x[0]}, '
+        print(f'debug vitzoo forward: x {x.shape} {x[0,0,0,:10]}, '
               f'pen {pen}, train {train}')
 
         if self.prompt is not None:
@@ -412,7 +424,7 @@ class ViTZoo(nn.Module):
 
         # debug
         print(f'debug vitzoo forward: q {q.shape} {q[0, :10]}, features {features.shape} {features[0, :10]}'
-              f'out {out.shape} {out[0]}')
+              f'out {out.shape} {out[0, :10]}')
 
         if self.prompt is not None and train:
             return out, prompt_loss

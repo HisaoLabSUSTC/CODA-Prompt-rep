@@ -129,16 +129,22 @@ class NormalNN(nn.Module):
                         x = x.cuda()
                         y = y.cuda()
 
-                    # debug:
-                    fake_img = torch.ones_like(x)  # bs, 3, 224, 224
-                    fake_y = torch.ones_like(y).long()
-                    # model update
-                    loss, output, loss_dict = self.update_model(fake_img, fake_y)
-                    print(f'debug: loss: {loss.item():.4f}; output {output.shape}: {output[0].detach().cpu().numpy()}')
-                    raise Exception('stop')
+                    # # debug:
+                    # fake_img = torch.ones_like(x)  # bs, 3, 224, 224
+                    # fake_y = torch.ones_like(y).long()
+                    # # model update
+                    # loss, output, loss_dict = self.update_model(fake_img, fake_y)
+                    # print(f'debug: loss: {loss.item():.4f}; output {output.shape}: {output[0].detach().cpu().numpy()}')
+                    # raise Exception('stop')
 
                     # model update
                     loss, output, loss_dict = self.update_model(x, y)
+
+                    # debug:
+                    print(f'debug: NormalNN, learn_batch, x: {x.shape} {x[0,0,0,:10]}, '
+                          f'y: {y.shape} {y[:10]}, task: {task.shape} {task[:10]} '
+                          f'loss: {loss.item():.4f}; output {output.shape}: {output[0].detach().cpu().numpy()}')
+                    raise Exception('stop')
 
                     # measure elapsed time
                     batch_time.update(batch_timer.toc())  

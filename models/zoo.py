@@ -393,6 +393,9 @@ class ViTZoo(nn.Module):
         
     # pen: get penultimate features    
     def forward(self, x, pen=False, train=False):
+        # debug
+        print(f'debug vitzoo forward: x {x.shape} {x[0]}, '
+              f'pen {pen}, train {train}')
 
         if self.prompt is not None:
             with torch.no_grad():
@@ -403,9 +406,14 @@ class ViTZoo(nn.Module):
         else:
             out, _ = self.feat(x)
             out = out[:,0,:]
-        out = out.view(out.size(0), -1)
+        features = out.view(out.size(0), -1)
         if not pen:
-            out = self.last(out)
+            out = self.last(features)
+
+        # debug
+        print(f'debug vitzoo forward: q {q.shape} {q[0, :10]}, features {features.shape} {features[0, :10]}'
+              f'out {out.shape} {out[0]}')
+
         if self.prompt is not None and train:
             return out, prompt_loss
         else:

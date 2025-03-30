@@ -102,6 +102,7 @@ if __name__ == '__main__':
     # save args
     with open(args.log_dir + '/args.yaml', 'w') as yaml_file:
         yaml.dump(vars(args), yaml_file, default_flow_style=False)
+    print(vars(args))
     
     metric_keys = ['acc','time',]
     save_keys = ['global', 'pt', 'pt-local']

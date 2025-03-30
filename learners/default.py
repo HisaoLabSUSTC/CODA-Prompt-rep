@@ -128,7 +128,14 @@ class NormalNN(nn.Module):
                     if self.gpu:
                         x = x.cuda()
                         y = y.cuda()
-                    
+
+                    # debug:
+                    fake_img = torch.ones_like(x)  # bs, 3, 224, 224
+                    fake_y = torch.ones_like(y).long()
+                    # model update
+                    loss, output, loss_dict = self.update_model(fake_img, fake_y)
+                    print(f'debug: loss: {loss.item():.4f}; output {output.shape}: {output[0]}')
+
                     # model update
                     loss, output, loss_dict = self.update_model(x, y)
 
